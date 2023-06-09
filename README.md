@@ -1,14 +1,12 @@
 # Rustlog
 
-Created the project with `cargo init --lib` in the directory.
+A simple spike for logging in Rust and WebAssembly.
 
-Added the wasm-bindgen dependency with `cargo add wasm-bindgen`
+## Creation
 
-Added the CLI with `cargo install wasm-bindgen-cli`
+- Created the project with `cargo init --lib` in the root directory.
+- Added the wasm-bindgen dependency with `cargo add wasm-bindgen` (and similar for `js-sys`, `log`, etc.)
+- Added the CLI with `cargo install wasm-bindgen-cli`
 
-Built the debug version with `cargo build --target wasm32-unknown-unknown`
-
-Built the wasm package with `wasm-bindgen --out-dir ./out --target web ./target/wasm32-unknown-unknown/debug/rustlog.wasm`
-
-See `./build.sh` for release build.
-Start the site with `npx serve ./public`
+See `./build.sh` for the Rust build commands to create the Wasm artifacts.
+Start the site with `npx serve ./public` (no build step necessary - all JS currently).
