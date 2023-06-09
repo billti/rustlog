@@ -1,0 +1,29 @@
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
+use std::sync::OnceLock;
+
+pub trait LogTelemetry: Sync + Send {
+    fn log(&self, msg: &str);
+}
+
+// Use the Atomic bool for low-overhead checking before unwrapping the logger
+static TELEM_ENABLED: AtomicBool = AtomicBool::new(false);
+static TELEM_GLOBAL: OnceLock<&dyn LogTelemetry> = OnceLock::new();
+
+pub fn set_telemetry_logger(logger: &'static dyn LogTelemetry) {
+    let _ = TELEM_GLOBAL.set(logger); // TODO: Error handling
+    TELEM_ENABLED.store(true, Ordering::Relaxed);
+}
+
+#[inline]
+pub fn is_telemetry_enabled() -> bool {
+    TELEM_ENABLED.load(Ordering::Relaxed)
+}
+
+pub fn log_telemetry(msg: &str) {
+    if is_telemetry_enabled() {
+        if let Some(logger) = TELEM_GLOBAL.get() {
+            logger.log(msg);
+        }
+    }
+}

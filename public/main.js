@@ -1,4 +1,4 @@
-import loadWasm, {greet, initLogging, doSomething} from "./wasm/rustlog.js";
+import loadWasm, {greet, initLogging, doSomething, initTelemetry} from "./wasm/rustlog.js";
 
 function setLogger() {
     // There's little value in using an internal function that closes over a
@@ -6,11 +6,12 @@ function setLogger() {
     // it correctly when later logging calls occur.
     const prefix = document.location.host;
     function logger(msg) {console.log(`${prefix} [${new Date().toISOString()}] ${msg}`);}
-    initLogging(logger, 2);
+    initLogging(logger, 4);
 }
 
 await loadWasm();
 setLogger();
+initTelemetry((msg) => console.log(`[telemetry] ${msg}`));
 
 const button = document.querySelector('#run-button')
     .addEventListener('click', () => doSomething());

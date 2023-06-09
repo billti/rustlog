@@ -1,8 +1,39 @@
+use js_sys::Function;
+use log::{debug, error, info, LevelFilter, Record};
+use std::cell::OnceCell;
+use std::cell::RefCell;
+use std::sync::Once;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsValue;
-use js_sys::Function;
-use log::{error, info, Record, LevelFilter};
-use std::cell::RefCell;
+
+mod telemetry;
+use crate::telemetry::{is_telemetry_enabled, log_telemetry, set_telemetry_logger, LogTelemetry};
+
+// ******** Test functions *********
+
+#[wasm_bindgen]
+extern "C" {
+    fn alert(s: &str);
+
+    #[wasm_bindgen(js_namespace = console, js_name=log)]
+    fn js_log(msg: &str);
+}
+
+#[wasm_bindgen]
+pub fn greet(name: &str) {
+    alert(&format!("Hello there, {}", name));
+}
+
+#[wasm_bindgen(js_name=doSomething)]
+pub fn do_something() {
+    debug!("About to log some telemetry");
+    log_telemetry("event=something, action=did");
+    debug!("Telemetry sent!");
+    error!("Are you sure about this!");
+}
+
+
+// ******** LOGGING WebAssembly code *********
 
 static MY_LOGGER: MyLogger = MyLogger;
 
@@ -43,19 +74,6 @@ pub fn hook(_info: &std::panic::PanicInfo) {
     // Should write panic details to the configured logger
 }
 
-#[wasm_bindgen]
-extern "C" {
-    fn alert(s: &str);
-
-    #[wasm_bindgen(js_namespace = console, js_name=log)]
-    fn js_log(msg: &str);
-}
-
-#[wasm_bindgen]
-pub fn greet(name: &str) {
-    alert(&format!("Hello there, {}", name));
-}
-
 #[wasm_bindgen(js_name=initLogging)]
 pub fn init_logging(callback: JsValue, level: i32) -> Result<(), JsValue> {
     if !callback.is_function() {
@@ -67,7 +85,9 @@ pub fn init_logging(callback: JsValue, level: i32) -> Result<(), JsValue> {
     }
 
     let thefn: Function = callback.dyn_into().unwrap(); // Already checked it was a function
-    LOG_JS_FN.with(|f| {*f.borrow_mut() = Option::Some(thefn);});
+    LOG_JS_FN.with(|f| {
+        *f.borrow_mut() = Option::Some(thefn);
+    });
 
     // TODO: Maybe replace this with just checking if the static option is Some.
     // (And do that first and fail if already set)
@@ -90,12 +110,49 @@ pub fn set_log_level(level: i32) {
         3 => LevelFilter::Info,
         4 => LevelFilter::Debug,
         5 => LevelFilter::Trace,
-        _ => LevelFilter::Off
+        _ => LevelFilter::Off,
     });
     info!("Log level set to {}", level);
 }
 
-#[wasm_bindgen(js_name=doSomething)]
-pub fn do_something() {
-    error!("Are you sure about this!");
+
+// ************ TELEMETRY WebAssembly code **************
+
+// Holds a reference to the JavaScript function to call (which must be thread specific)
+thread_local! {
+    static TELEM_FN: OnceCell<Function> = OnceCell::new();
+}
+
+// The global logger that delegates to the thread local JS function (if present and enabled)
+struct WasmTelemetryLogger;
+impl LogTelemetry for WasmTelemetryLogger {
+    fn log(&self, msg: &str) {
+        if is_telemetry_enabled() {
+            TELEM_FN.with(|f| {
+                if let Some(jsfn) = f.get() {
+                    let _ = jsfn.call1(&JsValue::NULL, &JsValue::from_str(msg));
+                }
+            });
+        }
+    }
+}
+static WASM_TELEMETRY_LOGGER: WasmTelemetryLogger = WasmTelemetryLogger;
+
+#[wasm_bindgen(js_name=initTelemetry)]
+pub fn init_telemetry(callback: JsValue) -> Result<(), JsValue> {
+    // Ensure a function was passed, and set it in the thread local storage
+    if !callback.is_function() {
+        return Err(JsError::new("Invalid callback").into());
+    }
+
+    let thefn: Function = callback.dyn_into().unwrap();
+    TELEM_FN.with(|f| f.set(thefn))?;
+
+    // Ensure that the global logger is set (at most once).
+    static INIT_ONCE: Once = Once::new();
+    INIT_ONCE.call_once(|| {
+        set_telemetry_logger(&WASM_TELEMETRY_LOGGER);
+    });
+
+    Ok(())
 }
