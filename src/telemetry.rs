@@ -6,13 +6,14 @@ pub trait LogTelemetry: Sync + Send {
     fn log(&self, msg: &str);
 }
 
-// Use the Atomic bool for low-overhead checking before unwrapping the logger
+// Use the Atomic bool for low-overhead checking if telemetry is enabled before unwrapping the logger
 static TELEM_ENABLED: AtomicBool = AtomicBool::new(false);
 static TELEM_GLOBAL: OnceLock<&dyn LogTelemetry> = OnceLock::new();
 
-pub fn set_telemetry_logger(logger: &'static dyn LogTelemetry) {
-    let _ = TELEM_GLOBAL.set(logger); // TODO: Error handling
+pub fn set_telemetry_logger(logger: &'static dyn LogTelemetry) -> Result<(), &str> {
+    TELEM_GLOBAL.set(logger).map_err(|_| {"attempted to set a telemetry logger after it was already initialized"})?;
     TELEM_ENABLED.store(true, Ordering::Relaxed);
+    Ok(())
 }
 
 #[inline]

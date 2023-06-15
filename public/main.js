@@ -13,5 +13,8 @@ await loadWasm();
 setLogger();
 initTelemetry((msg) => console.log(`[telemetry] ${msg}`));
 
-const button = document.querySelector('#run-button')
+document.querySelector('#run-button')
     .addEventListener('click', () => doSomething());
+
+document.querySelector('#crash-button')
+    .addEventListener('click', () => greet("Bill"));
